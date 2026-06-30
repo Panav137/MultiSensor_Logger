@@ -12,7 +12,9 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_USART2_UART_Init(void);
+void Error_Handler(void);
 
+// Required for printf over UART
 int _write(int file, char *ptr, int len) {
     HAL_UART_Transmit(&huart2, (uint8_t*)ptr, len, HAL_MAX_DELAY);
     return len;
@@ -28,13 +30,18 @@ int main(void)
 
   printf("System Booting... Hardware Initialized.\r\n");
 
-  if (bme280_initialize_stm32(&bme_sensor, &hi2c1) == BME280_OK) {
-      printf("BME280 Initialized Successfully!\r\n");
-  } else {
-      printf("BME280 Initialization Failed (Normal if hardware not attached).\r\n");
+  /* --- HARDWARE HEALTH CHECK --- */
+  if (bme280_initialize_stm32(&bme_sensor, &hi2c1) != BME280_OK) {
+      // Alert Dashboard and enter Error Blink Loop
+      printf("ERROR: BME280_NOT_FOUND\r\n");
+      while (1) {
+          HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+          HAL_Delay(200);
+      }
   }
+  printf("BME280 Initialized Successfully!\r\n");
 
-  // New Bosch API settings structure
+  /* --- SENSOR CONFIGURATION --- */
   uint8_t settings_sel = BME280_SEL_OSR_PRESS | BME280_SEL_OSR_TEMP | BME280_SEL_OSR_HUM | BME280_SEL_FILTER;
   struct bme280_settings settings;
 
@@ -46,6 +53,7 @@ int main(void)
   bme280_set_sensor_settings(settings_sel, &settings, &bme_sensor);
   bme280_set_sensor_mode(BME280_POWERMODE_NORMAL, &bme_sensor);
 
+  /* --- MAIN TELEMETRY LOOP --- */
   while (1)
   {
       bme280_get_sensor_data(BME280_ALL, &comp_data, &bme_sensor);
@@ -113,6 +121,13 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
+  GPIO_InitStruct.Pin = GPIO_PIN_5;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 }
 
 void Error_Handler(void)
@@ -120,7 +135,3 @@ void Error_Handler(void)
   __disable_irq();
   while (1) {}
 }
-
-#ifdef  USE_FULL_ASSERT
-void assert_failed(uint8_t *file, uint32_t line) {}
-#endif
