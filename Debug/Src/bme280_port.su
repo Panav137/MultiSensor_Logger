@@ -1,0 +1,4 @@
+../Src/bme280_port.c:3:8:user_i2c_read	48	static
+../Src/bme280_port.c:9:8:user_i2c_write	48	static
+../Src/bme280_port.c:15:6:user_delay_us	24	static
+../Src/bme280_port.c:21:8:bme280_initialize_stm32	16	static
