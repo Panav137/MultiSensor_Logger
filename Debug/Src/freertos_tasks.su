@@ -1,0 +1,7 @@
+../Src/freertos_tasks.c:31:6:RTOS_CreateAll	16	static
+../Src/freertos_tasks.c:45:6:SensorTask	72	static
+../Src/freertos_tasks.c:81:6:LoggerTask	152	static
+../Src/freertos_tasks.c:117:6:UART_TxDoneCallback	16	static,ignoring_inline_asm
+../Src/freertos_tasks.c:123:6:UARTTask	152	static
+../Src/freertos_tasks.c:149:6:WatchdogTask	24	static
+../Src/freertos_tasks.c:161:6:DisplayTask	24	static

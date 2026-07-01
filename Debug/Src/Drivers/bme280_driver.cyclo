@@ -1,0 +1,5 @@
+../Src/Drivers/bme280_driver.c:23:26:bme280_write_reg	1
+../Src/Drivers/bme280_driver.c:28:26:bme280_read_regs	1
+../Src/Drivers/bme280_driver.c:33:13:bme280_read_calibration	1
+../Src/Drivers/bme280_driver.c:58:19:BME280_Init	2
+../Src/Drivers/bme280_driver.c:72:6:BME280_Read	2
