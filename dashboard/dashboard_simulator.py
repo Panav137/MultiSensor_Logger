@@ -1,83 +1,104 @@
+import json
+import time
+import random
+import math
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from collections import deque
-import random
-import math
 
-# --- Configuration ---
-MAX_POINTS = 50  # How many data points to show on the screen at once
+MAX_POINTS = 60        # 60 seconds of rolling data
 
-# --- Data Structures ---
-temps = deque(maxlen=MAX_POINTS)
-pressures = deque(maxlen=MAX_POINTS)
-humidities = deque(maxlen=MAX_POINTS)
+# Data buffers
+timestamps  = deque(maxlen=MAX_POINTS)
+temps       = deque(maxlen=MAX_POINTS)
+humidities  = deque(maxlen=MAX_POINTS)
+pressures   = deque(maxlen=MAX_POINTS)
+accel_z     = deque(maxlen=MAX_POINTS)
 
-# --- Plot Setup ---
-fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(8, 8))
-fig.canvas.manager.set_window_title('BME280 Live Telemetry (SIMULATION MODE)')
-fig.tight_layout(pad=4.0)
+# Setup Matplotlib Figure
+fig, axes = plt.subplots(2, 2, figsize=(12, 7))
+fig.suptitle("STM32 Multi-Sensor Dashboard (SIMULATION MODE)", fontsize=14, fontweight='bold', color='darkred')
 
-# Temperature Axis
-ax1.set_title('Temperature (°C)')
-ax1.set_ylabel('°C')
-line_temp, = ax1.plot([], [], 'r-', lw=2)
-ax1.grid(True, linestyle='--', alpha=0.6)
+start_time = time.time()
 
-# Pressure Axis
-ax2.set_title('Atmospheric Pressure (hPa)')
-ax2.set_ylabel('hPa')
-line_press, = ax2.plot([], [], 'g-', lw=2)
-ax2.grid(True, linestyle='--', alpha=0.6)
-
-# Humidity Axis
-ax3.set_title('Relative Humidity (%)')
-ax3.set_ylabel('%')
-ax3.set_xlabel('Recent Samples')
-line_hum, = ax3.plot([], [], 'b-', lw=2)
-ax3.grid(True, linestyle='--', alpha=0.6)
-
-time_counter = 0
-
-# --- Animation Update Function ---
-def update(frame):
-    global time_counter
-    time_counter += 1
+def generate_mock_data():
+    """Artificially generates the JSON string that the STM32 would send."""
+    t = time.time() - start_time
+    ts = int(t * 1000)
     
-    # Generate fake realistic environmental data using sine waves and noise
-    temp = 24.5 + math.sin(time_counter * 0.1) * 0.5 + random.uniform(-0.05, 0.05)
-    press = 1013.25 + math.cos(time_counter * 0.05) * 1.5 + random.uniform(-0.2, 0.2)
-    hum = 45.0 + math.sin(time_counter * 0.08) * 3.0 + random.uniform(-0.5, 0.5)
+    # Simulate realistic physical data
+    temp = 25.0 + math.sin(t / 5.0) * 2.0 + random.uniform(-0.1, 0.1)
+    hum = 50.0 + math.cos(t / 10.0) * 5.0 + random.uniform(-0.5, 0.5)
+    press = 1013.25 + random.uniform(-0.2, 0.2)
     
-    # Append to our scrolling windows
-    temps.append(temp)
-    pressures.append(press)
-    humidities.append(hum)
-    
-    # Create a dynamic X-axis array based on current length
-    x_data = range(len(temps))
-    
-    # Update the lines
-    line_temp.set_data(x_data, temps)
-    line_press.set_data(x_data, pressures)
-    line_hum.set_data(x_data, humidities)
-    
-    # Dynamically scale the X and Y axes
-    ax1.set_xlim(0, MAX_POINTS)
-    if len(temps) > 1:
-        ax1.set_ylim(min(temps) - 0.5, max(temps) + 0.5)
-    
-    ax2.set_xlim(0, MAX_POINTS)
-    if len(pressures) > 1:
-        ax2.set_ylim(min(pressures) - 1, max(pressures) + 1)
-    
-    ax3.set_xlim(0, MAX_POINTS)
-    if len(humidities) > 1:
-        ax3.set_ylim(min(humidities) - 2, max(humidities) + 2)
+    # MPU6050 Z-axis usually reads ~16384 when resting flat (1g of gravity)
+    az = 16384 + random.randint(-100, 100) 
 
-    return line_temp, line_press, line_hum
+    data_dict = {
+        "ts": ts,
+        "T": round(temp, 2),
+        "H": round(hum, 1),
+        "P": round(press, 2),
+        "ax": random.randint(-50, 50),
+        "ay": random.randint(-50, 50),
+        "az": az,
+        "gx": random.randint(-10, 10),
+        "gy": random.randint(-10, 10),
+        "gz": random.randint(-10, 10),
+        "crc": "DEADBEEF" # Fake CRC hash
+    }
+    
+    # Return exactly as the STM32 UART would output it
+    return json.dumps(data_dict) + "\r\n"
 
-# --- Run the Dashboard ---
-print("Starting BME280 Simulator...")
-# Update every 500ms to mimic the STM32's real-time output
-ani = animation.FuncAnimation(fig, update, interval=500, cache_frame_data=False)
+def parse_line(line):
+    try:
+        return json.loads(line.strip())
+    except (json.JSONDecodeError, ValueError):
+        return None
+
+def animate(frame):
+    try:
+        # Instead of reading from the serial port, we call our mock generator
+        raw = generate_mock_data() 
+        data = parse_line(raw)
+        
+        if data:
+            ts = data.get("ts", 0) / 1000.0  # convert ms to seconds
+            timestamps.append(ts)
+            temps.append(data.get("T", 0))
+            humidities.append(data.get("H", 0))
+            pressures.append(data.get("P", 0))
+            accel_z.append(data.get("az", 0))
+
+            for ax in axes.flat:
+                ax.clear()
+
+            axes[0,0].plot(list(timestamps), list(temps), color="tomato", linewidth=2)
+            axes[0,0].set_title("Temperature (°C)")
+            axes[0,0].set_ylabel("°C")
+            axes[0,0].grid(True, linestyle='--', alpha=0.6)
+
+            axes[0,1].plot(list(timestamps), list(humidities), color="steelblue", linewidth=2)
+            axes[0,1].set_title("Humidity (%RH)")
+            axes[0,1].set_ylabel("%")
+            axes[0,1].grid(True, linestyle='--', alpha=0.6)
+
+            axes[1,0].plot(list(timestamps), list(pressures), color="mediumseagreen", linewidth=2)
+            axes[1,0].set_title("Pressure (hPa)")
+            axes[1,0].set_ylabel("hPa")
+            axes[1,0].grid(True, linestyle='--', alpha=0.6)
+
+            axes[1,1].plot(list(timestamps), list(accel_z), color="mediumpurple", linewidth=2)
+            axes[1,1].set_title("Accel Z (Raw Gravity)")
+            axes[1,1].set_ylabel("ADC counts")
+            axes[1,1].grid(True, linestyle='--', alpha=0.6)
+
+            fig.tight_layout()
+
+    except Exception as e:
+        print(f"Error: {e}")
+
+# Run the animation loop at 1000ms intervals (matching the FreeRTOS 1-second delay)
+ani = animation.FuncAnimation(fig, animate, interval=1000)
 plt.show()
